@@ -28,9 +28,10 @@ jobs:
             > /tmp/spec_events.txt
 
           # Frontend event names are the single source-of-truth in the generated file (#677).
-          # Fall back to the ClaimEvent alias target if the generated file is missing.
+          # Extract only from the ANALYTICS_EVENTS array to avoid false positives like 'string'.
           if [ -f frontend/lib/analytics-events.ts ]; then
-            grep -oE "'[A-Za-z0-9 ]+'" frontend/lib/analytics-events.ts \
+            awk '/export const ANALYTICS_EVENTS = \[/{flag=1} flag{print} flag && /\] as const;/{exit}' frontend/lib/analytics-events.ts \
+              | grep -oE "'[A-Za-z0-9 ]+'" \
               | tr -d "'" \
               >> /tmp/code_events.txt
           else
