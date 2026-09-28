@@ -22,16 +22,23 @@ jobs:
 
       - name: Extract event names from spec and code
         run: |
-          # Events in the spec are `#### \`Event Name\`` headings.
+          # Events in the spec are `#### \`Event Name\`` headings (#677: Sections 4-6).
           grep -E '^#### `[^`]+`' docs/analytics-spec.md \
             | sed -E 's/^#### `([^`]+)`.*/\1/' \
             > /tmp/spec_events.txt
 
-          # Frontend event names are string literals in the ClaimEvent union.
-          awk '/type ClaimEvent =/{flag=1} flag{print} flag && /;$/{exit}' frontend/lib/analytics.ts \
-            | grep -oE "'[A-Za-z0-9 ]+'" \
-            | tr -d "'" \
-            >> /tmp/code_events.txt
+          # Frontend event names are the single source-of-truth in the generated file (#677).
+          # Fall back to the ClaimEvent alias target if the generated file is missing.
+          if [ -f frontend/lib/analytics-events.ts ]; then
+            grep -oE "'[A-Za-z0-9 ]+'" frontend/lib/analytics-events.ts \
+              | tr -d "'" \
+              >> /tmp/code_events.txt
+          else
+            awk '/type ClaimEvent =/{flag=1} flag{print} flag && /;$/{exit}' frontend/lib/analytics.ts \
+              | grep -oE "'[A-Za-z0-9 ]+'" \
+              | tr -d "'" \
+              >> /tmp/code_events.txt
+          fi
 
           # Mobile event names are the `name:` discriminator values.
           awk '/export type AnalyticsEvent =/{flag=1} flag{print} flag && /^};/{exit}' mobile/app/src/analytics/analytics.ts \
@@ -41,6 +48,15 @@ jobs:
 
           sort -u /tmp/spec_events.txt > /tmp/spec.txt
           sort -u /tmp/code_events.txt > /tmp/code.txt
+
+      - name: Verify generated event list is fresh (#677)
+        run: |
+          cp frontend/lib/analytics-events.ts /tmp/analytics-events.committed.ts
+          node frontend/scripts/generate-analytics-events.mjs
+          if ! diff -u /tmp/analytics-events.committed.ts frontend/lib/analytics-events.ts; then
+            echo "::error::frontend/lib/analytics-events.ts is stale. Run 'npm run generate:analytics-events' in frontend/ and commit the result."
+            exit 1
+          fi
 
       - name: Compare and fail on drift
         run: |
