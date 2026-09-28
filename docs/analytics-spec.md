@@ -402,7 +402,7 @@ Fired immediately when a recipient opens a claim link. Fires before token verifi
 |----------|------|---------------------|
 | `journey` | string | `"recipient"` |
 | `claim_id` | string | Extracted from URL token |
-| `entry_channel` | string | Best-guess referral channel: `"sms"`, `"email"`, `"whatsapp"`, `"direct"`, `"unknown"` |
+| `entry_channel` | string | Best-guess referral channel: `"sms"`, `"email"`, `"whatsapp"`, `"qr_scan"`, `"deep_link"`, `"direct"`, `"unknown"`. `qr_scan` is the mobile QR-scan entry path and must stay distinguishable from the sender `share_method: "qr_code"`. `deep_link` covers `bridgelet://claim/<token>` and `https://bridgelet.app/claim/<token>` opens. `direct` is the web fallback. |
 
 ---
 
@@ -514,7 +514,7 @@ Fired when the sweep transaction is confirmed on-chain. This is the primary conv
 | `asset_type` | string | |
 | `time_to_claim_hours` | number | Hours between `Payment Created` (sender) and `Claim Succeeded` (recipient) |
 | `sweep_duration_ms` | number | Time in ms from `Claim Submitted` to on-chain confirmation |
-| `entry_channel` | string | Same value recorded at `Claim Page Opened` |
+| `entry_channel` | string | Same value recorded at `Claim Page Opened`, including `"qr_scan"` and `"deep_link"` where applicable |
 
 ---
 
@@ -809,7 +809,7 @@ Breakdown of channels through which recipients open claim links.
 > `bridgelet-product-audit/postmortems/analytics-spec-vs-implementation-unverified.md`.
 
 ```
-For each entry_channel in {sms, email, whatsapp, direct, unknown}:
+For each entry_channel in {sms, email, whatsapp, qr_scan, deep_link, direct, unknown}:
   % = (Claim Page Opened events with entry_channel)
       / (total Claim Page Opened events)
       × 100

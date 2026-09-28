@@ -3,8 +3,19 @@ import Constants from "expo-constants";
 const IS_DEV = Constants.appOwnership === "expo" || __DEV__;
 
 // Event names must match `docs/analytics-spec.md` `#### \`Event Name\`` headings exactly.
+// `entry_channel` values must match §5.1, including mobile-specific `qr_scan`
+// (QR-scanner entry path) and `deep_link` (`bridgelet://claim/*`,
+// `https://bridgelet.app/claim/*` via `src/linking/useDeepLinking.ts`).
+export type EntryChannel =
+  | "sms"
+  | "email"
+  | "whatsapp"
+  | "qr_scan"
+  | "deep_link"
+  | "direct"
+  | "unknown";
 export type AnalyticsEvent =
-  | { name: "Claim Page Opened"; params: { claim_id: string; entry_channel: string } }
+  | { name: "Claim Page Opened"; params: { claim_id: string; entry_channel: EntryChannel } }
   | { name: "Claim Verified"; params: { claim_id: string; asset_type?: string; expiry_days_remaining?: number; verification_time_ms: number } }
   | { name: "Claim CTA Clicked"; params: { claim_id: string; asset_type?: string } }
   | { name: "Wallet Address Screen Viewed"; params: { claim_id: string; has_previous_address: boolean } }
@@ -12,7 +23,7 @@ export type AnalyticsEvent =
   | { name: "Wallet Address Validation Failed"; params: { claim_id?: string; validation_error: string; attempt_number: number } }
   | { name: "Claim Confirmation Viewed"; params: { claim_id: string; asset_type?: string } }
   | { name: "Claim Submitted"; params: { claim_id: string; asset_type?: string } }
-  | { name: "Claim Succeeded"; params: { claim_id: string; asset_type?: string; time_to_claim_hours?: number; sweep_duration_ms?: number; entry_channel?: string } }
+  | { name: "Claim Succeeded"; params: { claim_id: string; asset_type?: string; time_to_claim_hours?: number; sweep_duration_ms?: number; entry_channel?: EntryChannel } }
   | { name: "Claim Failed"; params: { claim_id: string; asset_type?: string; error_code?: string; error_type: string; attempt_number: number } }
   | { name: "Claim Success Viewed"; params: { claim_id: string; asset_type?: string } }
   | { name: "Sender Signup CTA Clicked"; params: { claim_id: string } }

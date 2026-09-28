@@ -431,7 +431,14 @@ export type ShareMethod = 'sms' | 'email' | 'whatsapp' | 'qr_code';
 
 export type EntrySource = 'direct' | 'referral' | 'shared_link' | 'unknown';
 
-export type ClaimEntryChannel = 'sms' | 'email' | 'whatsapp' | 'direct' | 'unknown';
+export type ClaimEntryChannel =
+  | 'sms'
+  | 'email'
+  | 'whatsapp'
+  | 'qr_scan'
+  | 'deep_link'
+  | 'direct'
+  | 'unknown';
 
 export type PaymentClaimStatus = 'unclaimed' | 'claimed' | 'expired';
 

@@ -28,6 +28,10 @@ function claimEntryChannel(): ClaimEntryChannel {
     const params = new URLSearchParams(window.location.search);
     const flagged = (params.get('channel') ?? params.get('src') ?? params.get('utm_source') ?? '')
       .toLowerCase();
+    if (flagged === 'qr' || flagged.includes('qr_scan') || flagged.includes('qr-scan') || flagged.includes('qrcode') || (flagged.includes('qr') && flagged.includes('scan')))
+      return 'qr_scan';
+    if (flagged.includes('deep_link') || flagged.includes('deep-link') || flagged.includes('deeplink') || flagged.includes('applink'))
+      return 'deep_link';
     if (flagged.includes('whatsapp') || flagged.includes('wa')) return 'whatsapp';
     if (flagged.includes('mail') || flagged.includes('email')) return 'email';
     if (flagged.includes('sms') || flagged.includes('text')) return 'sms';
