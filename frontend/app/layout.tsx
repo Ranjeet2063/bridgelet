@@ -1,22 +1,4 @@
 import type { Metadata } from 'next';
-import './globals.css';
-
-export const metadata: Metadata = {
-  title: 'Bridgelet',
-  description: 'Bridgelet Payment Flows',
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="en">
-      <body className="antialiased bg-slate-50">{children}</body>
-    </html>
-  );
-}import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { DevToolbar } from '@/components/dev-toolbar';
@@ -64,7 +46,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           {children}
           {isDev && <DevToolbar />}
           {isDev && <MockProvider />}
-          {/* Plausible loader — kept inside RootLayout so the loader is present
+          {/* Plausible loader �?" kept inside RootLayout so the loader is present
               on every route; the underlying script tag is stripped server-side
               on claim routes, where third-party scripts are forbidden by the
               security model (T-16, token-in-Referer). */}
