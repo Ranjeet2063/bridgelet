@@ -19,7 +19,16 @@ export interface CreateAccountRequest {
   signingMode?: 'backend' | 'freighter-client';
 }
 
-export type AccountStatus = 'pending' | 'claimed' | 'expired';
+/** Mirrors bridgelet-sdk's AccountStatus enum (src/modules/accounts/enums). */
+export type AccountStatus =
+  | 'initializing'
+  | 'pending_payment' // account exists on-chain; waiting for the sender's payment
+  | 'pending_claim' // payment detected; claimable
+  | 'claiming'
+  | 'partial_sweep'
+  | 'claimed'
+  | 'expired'
+  | 'failed';
 
 /** Response from POST /send */
 export interface AccountResponse {

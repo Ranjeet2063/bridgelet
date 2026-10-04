@@ -7,6 +7,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const requestId = getRequestId(req);

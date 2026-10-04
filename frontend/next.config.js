@@ -29,8 +29,18 @@ const nextConfig = {
    * Note: the path segment decision (vs. URL fragment `#token=...`) is
    * documented in docs/security-model.mdx under "Claim Token Placement".
    */
+  // The SDK builds claim links as `<CLAIM_BASE_URL>/c/<token>`; this app's route is
+  // /claim/[token]. A rewrite (not a redirect) keeps the token out of an extra hop.
+  async rewrites() {
+    return [{ source: '/c/:token', destination: '/claim/:token' }];
+  },
+
   async headers() {
     return [
+      {
+        source: '/c/:token',
+        headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
+      },
       {
         // Matches /claim/<any-token> — Next.js header source patterns use
         // :param notation, not the [param] file-system convention.
