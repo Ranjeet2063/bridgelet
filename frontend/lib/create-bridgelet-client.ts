@@ -114,20 +114,29 @@ export class BridgeletClient {
     this.maxDelayMs = options.maxDelayMs ?? 30_000;
   }
 
-  private async request<T>(url: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    url: string,
+    options: RequestInit = {},
+    tuning: { maxRetries?: number; timeoutMs?: number } = {},
+  ): Promise<T> {
     const headers = new Headers(options.headers);
     headers.set('Content-Type', 'application/json');
 
+    const maxRetries = tuning.maxRetries ?? this.maxRetries;
     let lastError: unknown;
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      const response = await fetchWithTimeout(url, { ...options, headers }).catch((err) => {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const response = await fetchWithTimeout(
+        url,
+        { ...options, headers },
+        tuning.timeoutMs,
+      ).catch((err) => {
         lastError = err;
         return null;
       });
 
       if (!response) {
-        if (attempt < this.maxRetries && isTransientError(lastError)) {
+        if (attempt < maxRetries && isTransientError(lastError)) {
           await this.backoff(attempt);
           continue;
         }
@@ -141,7 +150,7 @@ export class BridgeletClient {
       }
 
       if (!response.ok) {
-        if (attempt < this.maxRetries && response.status >= 500) {
+        if (attempt < maxRetries && response.status >= 500) {
           lastError = response;
           await this.backoff(attempt);
           continue;
@@ -165,10 +174,15 @@ export class BridgeletClient {
   // ─── Accounts (proxied through this app's own server) ───────────────────────
 
   createAccount(data: CreateAccountRequest): Promise<AccountResponse> {
-    return this.request<AccountResponse>(`${this.internalBaseUrl}/api/accounts`, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
+    // Never auto-retry: every attempt provisions a NEW on-chain account (2 XLM
+    // reserve from the funding wallet) and returns a claim URL exactly once. A
+    // timeout followed by a retry would orphan the first account and its link.
+    // Timeout must exceed the proxy's 55s upstream limit.
+    return this.request<AccountResponse>(
+      `${this.internalBaseUrl}/api/accounts`,
+      { method: 'POST', body: JSON.stringify(data) },
+      { maxRetries: 0, timeoutMs: 60_000 },
+    );
   }
 
   prepareAccountTransaction(data: CreateAccountRequest): Promise<PreparedAccountTransaction> {

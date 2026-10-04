@@ -28,7 +28,7 @@ const INITIAL_STATE: SendFormState = {
   amountXlm: '',
   assetCode: 'XLM',
   memo: '',
-  expiresIn: 7 * 24 * 60 * 60,
+  expiresIn: 24 * 60 * 60,
 };
 
 const STEP_ORDER: SendFormStep[] = ['connect', 'expiry', 'details', 'confirm'];
@@ -84,7 +84,15 @@ export function SendForm() {
   }
 
   function updateState(patch: Partial<SendFormState>) {
-    setFormState((prev) => ({ ...prev, ...patch }));
+    setFormState((prev) => {
+      const next = { ...prev, ...patch };
+      // The payload sends `expiresIn` (seconds); the expiry step only edits
+      // `expiresInHours`. Keep them in sync so the sender's choice is honoured.
+      if (patch.expiresInHours !== undefined) {
+        next.expiresIn = Math.round(patch.expiresInHours * 3600);
+      }
+      return next;
+    });
   }
 
   return (

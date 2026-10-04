@@ -47,7 +47,10 @@ describe('next.config.js — security headers', () => {
 
     // Routes such as /, /send, /roadmap must not carry the claim-page header —
     // applying it broadly would suppress analytics referrer data site-wide.
-    const nonClaimRoutes = headerRules.filter((rule) => rule.source !== '/claim/:token');
+    // /c/:token is the SDK's claim-link path, rewritten to /claim/:token in next.config.js,
+    // so it carries the same token and needs the same header.
+    const claimSources = ['/claim/:token', '/c/:token'];
+    const nonClaimRoutes = headerRules.filter((rule) => !claimSources.includes(rule.source));
     for (const rule of nonClaimRoutes) {
       const has = rule.headers.some((h) => h.key.toLowerCase() === 'referrer-policy');
       expect(has, `Unexpected Referrer-Policy on route ${rule.source}`).toBe(false);

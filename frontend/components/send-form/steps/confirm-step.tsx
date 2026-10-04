@@ -16,6 +16,7 @@ import {
   type AccountCreationErrorInfo,
 } from '@/lib/account-errors';
 import { publicEnv } from '@/lib/env';
+import { FundingError, fundEphemeralAccount } from '@/lib/fund-ephemeral-account';
 import { analytics } from '@/lib/analytics';
 
 /**
@@ -41,6 +42,23 @@ function classifyError(err: unknown): AccountCreationErrorInfo {
           : 'Approve the Freighter prompt, or go back and reconnect your wallet.',
     };
   }
+  if (err instanceof FundingError) {
+    return {
+      code:
+        err.code === 'SUBMIT_FAILED'
+          ? AccountCreationErrorCode.STELLAR_CREATION_FAILURE
+          : AccountCreationErrorCode.INVALID_REQUEST,
+      userMessage: err.message,
+      // The account already exists — retrying only re-sends the payment.
+      retryable: err.code === 'USER_REJECTED' || err.code === 'SUBMIT_FAILED',
+      suggestion:
+        err.code === 'SIGNER_MISMATCH'
+          ? 'Reconnect the Freighter wallet you selected, then try again.'
+          : err.code === 'UNSUPPORTED_ASSET'
+            ? 'Go back and choose XLM.'
+            : 'Try again — your claim link is kept until the payment goes through.',
+    };
+  }
   if (err instanceof RateLimitError) {
     return {
       code: AccountCreationErrorCode.RATE_LIMITED,
@@ -57,7 +75,16 @@ type ConfirmStepProps = {
   onBack: () => void;
 };
 
-type SubmitPhase = 'idle' | 'preparing' | 'awaiting-freighter' | 'submitting' | 'success';
+type SubmitPhase =
+  | 'idle'
+  | 'preparing'
+  | 'awaiting-freighter'
+  | 'submitting'
+  | 'funding'
+  | 'success';
+
+const STATUS_POLL_INTERVAL_MS = 3_000;
+const STATUS_POLL_MAX_MS = 120_000;
 
 export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
   const [submitPhase, setSubmitPhase] = useState<SubmitPhase>('idle');
@@ -69,6 +96,11 @@ export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
   const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [claimUrl, setClaimUrl] = useState<string | null>(null);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
+  // Account created on the backend but not yet funded. Held so a failed/rejected
+  // payment is retried WITHOUT creating a second account (the claim URL is only
+  // ever returned once).
+  const [pendingAccount, setPendingAccount] = useState<EphemeralAccount | null>(null);
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
   const { isSupported, writeUrl, isWriting, error: nfcError } = useNfc();
   // Timestamp of the sender's "Confirm & Send" intent, used to measure
   // Payment Confirmed → Payment Created latency.
@@ -103,28 +135,44 @@ export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
     setErrorInfo(null);
     setRetryAfter(null);
     try {
-      const payload = buildCreateAccountPayload();
+      let account = pendingAccount;
 
-      setSubmitPhase('awaiting-freighter');
-      const signing = await tryFreighterSenderSigning(client, payload);
+      if (!account) {
+        const payload = buildCreateAccountPayload();
 
-      setSubmitPhase('submitting');
-      let account: EphemeralAccount;
-      if (signing.mode === 'freighter-client') {
-        account = await createEphemeralAccount(
-          toCreateAccountRequestWithFreighterSignature(payload, signing.signed),
-        );
-        setSigningModeUsed('freighter-client');
-      } else {
-        account = await createEphemeralAccount(payload);
-        setSigningModeUsed('backend');
+        setSubmitPhase('awaiting-freighter');
+        const signing = await tryFreighterSenderSigning(client, payload);
+
+        setSubmitPhase('submitting');
+        if (signing.mode === 'freighter-client') {
+          account = await createEphemeralAccount(
+            toCreateAccountRequestWithFreighterSignature(payload, signing.signed),
+          );
+          setSigningModeUsed('freighter-client');
+        } else {
+          account = await createEphemeralAccount(payload);
+          setSigningModeUsed('backend');
+        }
+
+        if (!account.claimUrl) {
+          throw new Error(
+            'Account was created but no claim link was returned. Please contact support.',
+          );
+        }
+        setPendingAccount(account);
       }
 
-      if (!account.claimUrl) {
-        throw new Error(
-          'Account was created but no claim link was returned. Please contact support.',
-        );
-      }
+      // The backend only provisions the ephemeral account (status: pending_payment).
+      // The sender's money moves here, as a Stellar payment to account.publicKey.
+      setSubmitPhase('funding');
+      await fundEphemeralAccount({
+        from: state.publicKey,
+        to: account.publicKey,
+        amount: state.amountXlm,
+        assetCode: state.assetCode,
+      });
+      setAccountStatus('pending_payment');
+      void pollAccountStatus(account.accountId);
 
       setClaimUrl(account.claimUrl);
       setCreatedAccountId(account.accountId);
@@ -146,6 +194,23 @@ export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
       }
       setRetryCount(attempt);
       setSubmitPhase('idle');
+    }
+  }
+
+  // The backend's payment monitor polls Horizon every ~30s and moves the account
+  // pending_payment -> pending_claim once it sees the payment. Until then a claim
+  // attempt is rejected ("not funded"), so surface the state to the sender.
+  async function pollAccountStatus(accountId: string) {
+    const deadline = Date.now() + STATUS_POLL_MAX_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, STATUS_POLL_INTERVAL_MS));
+      try {
+        const latest = await client.getAccount(accountId);
+        setAccountStatus(latest.status);
+        if (latest.status !== 'pending_payment' && latest.status !== 'initializing') return;
+      } catch {
+        // transient — keep polling until the deadline
+      }
     }
   }
 
@@ -183,6 +248,7 @@ export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
   function submittingLabel(): string {
     if (submitPhase === 'awaiting-freighter') return 'Waiting for Freighter…';
     if (submitPhase === 'preparing') return 'Preparing transaction…';
+    if (submitPhase === 'funding') return 'Approve the payment in Freighter…';
     return 'Sending…';
   }
 
@@ -198,9 +264,20 @@ export function ConfirmStep({ state, onBack }: ConfirmStepProps) {
       >
         <p className="font-medium text-green-800">Payment sent!</p>
         <p className="mt-1 text-sm text-green-700">
-          A claim link has been sent to <strong>{state.recipientEmail}</strong>. They have 24
-          hours to claim their funds.
+          Share the claim link below with the recipient. It expires in{' '}
+          {formatExpiryLabel(state.expiresIn)}.
         </p>
+        {accountStatus === 'pending_payment' && (
+          <p role="status" className="text-xs text-green-700">
+            Confirming your payment on the network — the link becomes claimable in about a
+            minute.
+          </p>
+        )}
+        {accountStatus === 'pending_claim' && (
+          <p role="status" className="text-xs font-medium text-green-800">
+            Payment confirmed — the link is ready to claim.
+          </p>
+        )}
 
         {claimUrl && (
           <div className="mt-2 flex flex-col gap-2">
