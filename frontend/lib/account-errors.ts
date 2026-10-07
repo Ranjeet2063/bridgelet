@@ -127,9 +127,9 @@ function mapApiCodeToCreationInfo(
   if (statusCode === 401) {
     return {
       code: AccountCreationErrorCode.UNAUTHORIZED,
-      userMessage: 'Please reconnect your wallet.',
+      userMessage: 'Server authentication failed. The API token may be invalid or expired.',
       retryable: false,
-      suggestion: 'Reconnect your wallet to continue.',
+      suggestion: 'Please verify server configuration or contact support.',
     };
   }
 
