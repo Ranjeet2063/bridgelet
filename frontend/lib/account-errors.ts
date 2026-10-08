@@ -127,9 +127,9 @@ function mapApiCodeToCreationInfo(
   if (statusCode === 401) {
     return {
       code: AccountCreationErrorCode.UNAUTHORIZED,
-      userMessage: 'Server authentication failed. The API token may be invalid or expired.',
+      userMessage: 'The server could not authenticate with the Bridgelet API.',
       retryable: false,
-      suggestion: 'Please verify server configuration or contact support.',
+      suggestion: 'Check BRIDGELET_SDK_TOKEN in .env.local and JWT_SECRET on the SDK, then restart both.',
     };
   }
 
